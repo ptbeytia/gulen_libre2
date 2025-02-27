@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: productos-sin-gluten-app
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./build
+    # Especificamos que es una aplicación de React
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
