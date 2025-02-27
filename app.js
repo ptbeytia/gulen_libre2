@@ -141,8 +141,8 @@ const styles = {
 };
 
 // URLs de los datos CSV
-const URL_COACEL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3uqYngG2O1K07T4FMip3zvB1K1hLfKnFyxwEizn9R58-NQsxncOAKi2bWtH_Y81AqC8SazM1dqfSB/pub?gid=0&single=true&output=csv';
-const URL_CONVIVIR = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3uqYngG2O1K07T4FMip3zvB1K1hLfKnFyxwEizn9R58-NQsxncOAKi2bWtH_Y81AqC8SazM1dqfSB/pub?gid=1009429221&single=true&output=csv';
+const URL_COACEL = '/COACEL.csv';
+const URL_CONVIVIR = '/CONVIVIR.csv';
 
 // Colores para los gráficos
 const COLORS = [
