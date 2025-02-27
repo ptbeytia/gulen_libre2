@@ -129,6 +129,15 @@ const styles = {
     borderRadius: '4px',
     justifyContent: 'center',
   },
+  retryButton: {
+    padding: '10px 20px',
+    backgroundColor: '#4caf50',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '10px',
+  }
 };
 
 // URLs de los datos CSV
@@ -162,99 +171,122 @@ const App = () => {
   const [categoryStats, setCategoryStats] = useState([]);
   const [companyStats, setCompanyStats] = useState([]);
   
-  // Función para cargar datos CSV usando un proxy para evitar problemas de CORS
+  // Lista de proxies CORS alternativos para probar
+  const corsProxies = [
+    'https://corsproxy.io/?',
+    'https://cors-anywhere.herokuapp.com/',
+    'https://api.allorigins.win/raw?url='
+  ];
+  
+  // Función para cargar datos CSV usando múltiples proxies si es necesario
   const fetchCSVData = async (url) => {
+    let lastError = null;
+    
+    // Intentar primero acceso directo
     try {
-      // Intentamos cargar directamente primero sin proxy
-      let response;
-      try {
-        response = await fetch(url);
-      } catch (directError) {
-        // Si falla, intentamos con un proxy de CORS
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-        response = await fetch(proxyUrl);
+      const response = await fetch(url);
+      if (response.ok) {
+        const csvText = await response.text();
+        return parseCSVData(csvText);
       }
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const csvText = await response.text();
-      
-      // Parseamos el CSV a objeto JSON
-      return new Promise((resolve) => {
-        Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            // Normalizamos los nombres de las columnas
-            const data = results.data.map(item => ({
-              Categoria: item.Categoría || item.Categoria || '',
-              Producto: item.Producto || '',
-              Empresa: item.Empresa || ''
-            })).filter(item => item.Producto && item.Producto.trim() !== '');
-            
-            resolve(data);
-          }
-        });
-      });
-    } catch (error) {
-      console.error('Error fetching CSV data:', error);
-      // En caso de error, usamos datos de respaldo
-      return useBackupData(url);
+    } catch (directError) {
+      console.log('Acceso directo fallido, probando proxies CORS');
+      lastError = directError;
     }
+    
+    // Si el acceso directo falla, intentar con diferentes proxies CORS
+    for (const proxy of corsProxies) {
+      try {
+        const proxyUrl = `${proxy}${encodeURIComponent(url)}`;
+        console.log(`Intentando con proxy: ${proxy}`);
+        
+        const response = await fetch(proxyUrl);
+        
+        if (response.ok) {
+          const csvText = await response.text();
+          return parseCSVData(csvText);
+        }
+      } catch (proxyError) {
+        lastError = proxyError;
+        console.log(`Error con proxy ${proxy}:`, proxyError.message);
+      }
+    }
+    
+    // Si todos los métodos fallan, lanzar el último error
+    console.error('Todos los métodos de acceso fallaron');
+    throw lastError || new Error('No se pudo acceder a los datos CSV');
   };
   
-  // Función para proveer datos de respaldo en caso de que no se puedan cargar los CSV
-  const useBackupData = (url) => {
-    if (url.includes('gid=0')) { // Coacel
-      return [
-        { Categoria: 'Alimentos en conserva', Producto: 'Atún en agua', Empresa: 'San José' },
-        { Categoria: 'Bebidas', Producto: 'Jugo natural de naranja', Empresa: 'Watt\'s' },
-        { Categoria: 'Bebidas', Producto: 'Bebida gaseosa', Empresa: 'Coca-Cola' },
-        { Categoria: 'Cereales y harinas', Producto: 'Harina de arroz', Empresa: 'Carozzi' },
-        { Categoria: 'Cereales y harinas', Producto: 'Avena sin gluten', Empresa: 'Quaker' },
-        { Categoria: 'Lácteos', Producto: 'Yogur natural', Empresa: 'Soprole' },
-        { Categoria: 'Snacks', Producto: 'Papas fritas', Empresa: 'Evercrisp' },
-        { Categoria: 'Pastas', Producto: 'Fideos de arroz', Empresa: 'Carozzi' },
-        { Categoria: 'Galletas y repostería', Producto: 'Galletas de arroz', Empresa: 'Tamara' },
-        { Categoria: 'Alimentos en conserva', Producto: 'Arvejas en conserva', Empresa: 'San José' },
-      ];
-    } else { // Convivir
-      return [
-        { Categoria: 'Bebidas', Producto: 'Jugo de manzana', Empresa: 'Watt\'s' },
-        { Categoria: 'Panadería', Producto: 'Pan sin gluten', Empresa: 'Ideal' },
-        { Categoria: 'Panadería', Producto: 'Masa para pizza', Empresa: 'Líder' },
-        { Categoria: 'Cereales y harinas', Producto: 'Premezcla para pan', Empresa: 'Selecta' },
-        { Categoria: 'Galletas y repostería', Producto: 'Brownie sin gluten', Empresa: 'Jumbo' },
-        { Categoria: 'Pastas', Producto: 'Pasta de maíz', Empresa: 'Lucchetti' },
-        { Categoria: 'Snacks', Producto: 'Maní salado', Empresa: 'Evercrisp' },
-        { Categoria: 'Cereales y harinas', Producto: 'Cereal sin gluten', Empresa: 'Nestlé' },
-        { Categoria: 'Lácteos', Producto: 'Leche sin lactosa', Empresa: 'Colun' },
-        { Categoria: 'Bebidas', Producto: 'Bebida sabor cola', Empresa: 'Pepsi' },
-      ];
-    }
+  // Función para parsear el CSV
+  const parseCSVData = (csvText) => {
+    return new Promise((resolve, reject) => {
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          try {
+            // Normalizamos los nombres de las columnas
+            const data = results.data
+              .filter(item => item && typeof item === 'object')
+              .map(item => ({
+                Categoria: item.Categoría || item.Categoria || '',
+                Producto: item.Producto || '',
+                Empresa: item.Empresa || ''
+              }))
+              .filter(item => item.Producto && item.Producto.trim() !== '');
+            
+            resolve(data);
+          } catch (error) {
+            reject(new Error('Error al procesar los datos CSV: ' + error.message));
+          }
+        },
+        error: (error) => {
+          reject(new Error('Error al parsear CSV: ' + error.message));
+        }
+      });
+    });
   };
   
   // Cargar los datos cuando se monta el componente
-  useEffect(() => {
-    const loadData = async () => {
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Cargar datos de Coacel
+      let coacelResult = [];
       try {
-        setLoading(true);
-        const [coacelResult, convivirResult] = await Promise.all([
-          fetchCSVData(URL_COACEL),
-          fetchCSVData(URL_CONVIVIR)
-        ]);
-        
+        coacelResult = await fetchCSVData(URL_COACEL);
         setCoacelData(coacelResult);
-        setConvivirData(convivirResult);
-        setLoading(false);
-      } catch (err) {
-        setError('Error al cargar los datos. Por favor, intenta nuevamente más tarde.');
-        setLoading(false);
+      } catch (coacelError) {
+        console.error('Error al cargar datos de Coacel:', coacelError);
+        setCoacelData([]);
       }
-    };
-    
+      
+      // Cargar datos de Convivir
+      let convivirResult = [];
+      try {
+        convivirResult = await fetchCSVData(URL_CONVIVIR);
+        setConvivirData(convivirResult);
+      } catch (convivirError) {
+        console.error('Error al cargar datos de Convivir:', convivirError);
+        setConvivirData([]);
+      }
+      
+      // Verificar si se pudieron cargar algunos datos
+      if (coacelResult.length === 0 && convivirResult.length === 0) {
+        setError('No se pudieron cargar los datos. Por favor, intenta nuevamente más tarde.');
+      }
+      
+      setLoading(false);
+    } catch (err) {
+      console.error('Error general al cargar los datos:', err);
+      setError(`Error al cargar los datos: ${err.message || 'Error desconocido'}. Por favor, intenta nuevamente más tarde.`);
+      setLoading(false);
+    }
+  };
+  
+  useEffect(() => {
     loadData();
   }, []);
   
@@ -369,6 +401,11 @@ const App = () => {
     return Array.from(companies).sort();
   };
   
+  // Función para reintentar la carga de datos
+  const handleRetry = () => {
+    loadData();
+  };
+  
   // Renderizar componente de carga
   if (loading) {
     return (
@@ -379,12 +416,40 @@ const App = () => {
     );
   }
   
-  // Renderizar mensaje de error
+  // Renderizar mensaje de error con botón de reintento
   if (error) {
     return (
       <div style={styles.container}>
         <h1 style={styles.header}>Buscador de Productos Sin Gluten</h1>
-        <div style={styles.error}>{error}</div>
+        <div style={styles.error}>
+          {error}
+          <div>
+            <button style={styles.retryButton} onClick={handleRetry}>
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Renderizar página principal si no hay datos cargados
+  if (coacelData.length === 0 && convivirData.length === 0) {
+    return (
+      <div style={styles.container}>
+        <h1 style={styles.header}>Buscador de Productos Sin Gluten</h1>
+        <div style={styles.card}>
+          <h3>No se pudieron cargar los datos externos</h3>
+          <p>No se han podido cargar los datos desde los archivos CSV en línea. Esto puede deberse a:</p>
+          <ul>
+            <li>Problemas de conectividad con los servidores</li>
+            <li>Restricciones CORS en el navegador</li>
+            <li>Los archivos CSV ya no están disponibles en las URLs proporcionadas</li>
+          </ul>
+          <button style={styles.retryButton} onClick={handleRetry}>
+            Reintentar carga de datos
+          </button>
+        </div>
       </div>
     );
   }
@@ -401,8 +466,9 @@ const App = () => {
             style={styles.checkbox}
             checked={showCoacel}
             onChange={() => setShowCoacel(!showCoacel)}
+            disabled={coacelData.length === 0}
           />
-          Fundación Coacel
+          Fundación Coacel {coacelData.length === 0 && "(No disponible)"}
         </label>
         <label style={styles.checkboxLabel}>
           <input
@@ -410,8 +476,9 @@ const App = () => {
             style={styles.checkbox}
             checked={showConvivir}
             onChange={() => setShowConvivir(!showConvivir)}
+            disabled={convivirData.length === 0}
           />
-          Fundación Convivir
+          Fundación Convivir {convivirData.length === 0 && "(No disponible)"}
         </label>
       </div>
       
